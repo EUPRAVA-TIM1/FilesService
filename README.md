@@ -6,8 +6,7 @@ To start using this service you will need following .env variables
 
 - `FILES_PATH` - Directory where files would be saved (defaults to srv/files)
 - `FILE_SERVICE_PORT` - Port on which server will run (defaults to `8000`)
-- `MAX_IMAGE_SIZE` - Maximum image size server will accept (defaults to 2Mib)
-- `MAX_PDF_SIZE` - Maximum pdf size server will accept (defaults to 30kb)
+- `MAX_FILE_SIZE` - Maximum file size server will accept (defaults to 2Mib)
 
 ## Api
 
