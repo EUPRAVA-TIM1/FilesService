@@ -7,21 +7,18 @@ import (
 )
 
 type Config struct {
-	MaxImageSize int64
-	MaxPdfSize   int64
-	FilesPath    string
-	Port         string
-	Host         string
+	MaxFileSize int64
+	FilesPath   string
+	Port        string
+	Host        string
 }
 
 const (
-	filesPathKey         = "FILES_PATH"
-	portKey              = "FILE_SERVICE_PORT"
-	maxImgSizeKey        = "MAX_IMAGE_SIZE"
-	maxPdfSizeKey        = "MAX_PDF_SIZE"
-	defaultMaxSize       = 2 * 1024 * 1024
-	defaultMaxPdfSizeKey = 3 * 1024
-	defaultPort          = "8000"
+	filesPathKey   = "FILES_PATH"
+	portKey        = "FILE_SERVICE_PORT"
+	maxImgSizeKey  = "MAX_FILE_SIZE"
+	defaultMaxSize = 2 * 1024 * 1024
+	defaultPort    = "8000"
 )
 
 func NewConfig() (c Config) {
@@ -40,23 +37,12 @@ func NewConfig() (c Config) {
 	if ms, set := os.LookupEnv(maxImgSizeKey); set && ms != "" {
 		max, err := strconv.ParseInt(ms, 10, 0)
 		if err != nil {
-			c.MaxImageSize = defaultMaxSize
+			c.MaxFileSize = defaultMaxSize
 		} else {
-			c.MaxImageSize = max
+			c.MaxFileSize = max
 		}
 	} else {
-		c.MaxImageSize = defaultMaxSize
-	}
-
-	if ms, set := os.LookupEnv(maxPdfSizeKey); set && ms != "" {
-		max, err := strconv.ParseInt(ms, 10, 0)
-		if err != nil {
-			c.MaxPdfSize = defaultMaxPdfSizeKey
-		} else {
-			c.MaxPdfSize = max
-		}
-	} else {
-		c.MaxPdfSize = defaultMaxPdfSizeKey
+		c.MaxFileSize = defaultMaxSize
 	}
 
 	return

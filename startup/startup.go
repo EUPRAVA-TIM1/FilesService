@@ -25,10 +25,10 @@ func NewServer(config *config.Config) *Server {
 		config: config,
 	}
 }
-func (server Server) setup(path string, maxImgSize int64, maxPdfSize int64) handlers.FilesHandler {
+func (server Server) setup(path string, maxFileSize int64) handlers.FilesHandler {
 	fileRepo := repo.NewFileRepo(path)
 	fileService := service.NewFileService(fileRepo)
-	filesHandler := handlers.NewFilesHandler(fileService, maxImgSize, maxPdfSize)
+	filesHandler := handlers.NewFilesHandler(fileService, maxFileSize)
 	return filesHandler
 }
 
@@ -36,7 +36,7 @@ func (server Server) Start() {
 
 	r := mux.NewRouter()
 
-	h := server.setup(server.config.FilesPath, server.config.MaxImageSize, server.config.MaxPdfSize)
+	h := server.setup(server.config.FilesPath, server.config.MaxFileSize)
 	h.Init(r)
 
 	srv := &http.Server{
@@ -58,7 +58,7 @@ func (server Server) Start() {
 
 	log.Printf("Listening on port = %s\n", server.config.Port)
 	log.Printf("Files will be saved to = %s\n", server.config.FilesPath)
-	log.Printf("Max image size is %d bytes, max pdf size is %d bytes", server.config.MaxImageSize, server.config.MaxPdfSize)
+	log.Printf("Max file size is %d bytes", server.config.MaxFileSize)
 
 	<-c
 
