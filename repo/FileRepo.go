@@ -4,9 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"image"
-	"image/jpeg"
-	"image/png"
 	"io"
 
 	"log"
@@ -15,14 +12,12 @@ import (
 	"path"
 )
 
-var UnrecognizedImageFormatError = errors.New("Image format is unsupported")
+var UnrecognizedFormatError = errors.New("File format is unsupported")
 var FileNotExistError = errors.New("File doesnt exists")
 
 type FileRepo interface {
-	SaveImage(image multipart.File) (string, error)
-	SavePdf(pdf multipart.File) (string, error)
-	GetImage(name string) (image.Image, string, error)
-	GetPdf(name string) (*os.File, error)
+	SaveFile(image multipart.File, fileType string) (string, error)
+	GetFile(name string) (*os.File, error)
 }
 type fileRepo struct {
 	filePath string
@@ -42,38 +37,6 @@ func NewFileRepo(path string) FileRepo {
 	return fileRepo{path}
 }
 
-func (f fileRepo) SaveImage(newImage multipart.File) (string, error) {
-	imageData, imageType, err := image.Decode(newImage)
-	if err != nil {
-		log.Println(err)
-		return "", err
-	}
-	imageName := fmt.Sprintf("%s.%s", uuid.New().String(), imageType)
-
-	file, err := os.Create(path.Join(f.filePath, imageName))
-	defer file.Close()
-
-	if err != nil {
-		log.Println(err)
-		return "", err
-	}
-	switch imageType {
-	case "jpeg":
-		options := jpeg.Options{Quality: 100}
-		err = jpeg.Encode(file, imageData, &options)
-	case "png":
-		err = png.Encode(file, imageData)
-	case "default":
-		return "", UnrecognizedImageFormatError
-	}
-	if err != nil {
-		log.Println(err)
-		return "", err
-	}
-
-	return imageName, nil
-}
-
 func (f fileRepo) SavePdf(pdf multipart.File) (string, error) {
 	pdfName := fmt.Sprintf("%s.%s", uuid.New().String(), "pdf")
 	file, err := os.Create(path.Join(f.filePath, pdfName))
@@ -91,25 +54,27 @@ func (f fileRepo) SavePdf(pdf multipart.File) (string, error) {
 
 }
 
-func (f fileRepo) GetImage(name string) (image.Image, string, error) {
+func (f fileRepo) SaveFile(newFile multipart.File, fileType string) (string, error) {
+	if fileType != "jpeg" && fileType != "png" && fileType != "pdf" {
+		return "", UnrecognizedFormatError
+	}
 
-	_, err := os.Stat(path.Join(f.filePath, name))
-	if os.IsNotExist(err) {
-		return nil, "", FileNotExistError
-	}
-	if err != nil {
-		return nil, "", err
-	}
-	file, err := os.Open(path.Join(f.filePath, name))
+	fileName := fmt.Sprintf("%s.%s", uuid.New().String(), fileType)
+	file, err := os.Create(path.Join(f.filePath, fileName))
 	defer file.Close()
 	if err != nil {
-		return nil, "", err
+		log.Println(err)
+		return "", err
 	}
-
-	return image.Decode(file)
+	_, err = io.Copy(file, newFile)
+	if err != nil {
+		log.Println(err)
+		return "", err
+	}
+	return fileName, nil
 }
 
-func (f fileRepo) GetPdf(name string) (*os.File, error) {
+func (f fileRepo) GetFile(name string) (*os.File, error) {
 	_, err := os.Stat(path.Join(f.filePath, name))
 	if os.IsNotExist(err) {
 		return nil, FileNotExistError

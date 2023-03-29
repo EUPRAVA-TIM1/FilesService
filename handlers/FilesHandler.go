@@ -6,9 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
-	"image"
-	"image/jpeg"
-	"image/png"
 	"io"
 	"log"
 	"net/http"
@@ -31,13 +28,12 @@ const (
 )
 
 type filesHandler struct {
-	maxImageSize int64
-	maxPdfSize   int64
-	fileService  service.FileService
+	maxFileSize int64
+	fileService service.FileService
 }
 
-func NewFilesHandler(s service.FileService, maxImgSize int64, maxPdfSize int64) FilesHandler {
-	return filesHandler{fileService: s, maxPdfSize: maxPdfSize, maxImageSize: maxImgSize}
+func NewFilesHandler(s service.FileService, maxFileSize int64) FilesHandler {
+	return filesHandler{fileService: s, maxFileSize: maxFileSize}
 }
 
 func (f filesHandler) Init(r *mux.Router) {
@@ -50,63 +46,41 @@ func (f filesHandler) Init(r *mux.Router) {
 func (f filesHandler) GetFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["file"]
-	var fileType string
+	fileType := filepath.Ext(name)
 
-	fileType = filepath.Ext(name)
-
-	if fileType == ".pdf" {
+	switch fileType {
+	case ".pdf":
 		w.Header().Set(contentType, appPdf)
-		file, err := f.fileService.GetPdf(name)
-		defer file.Close()
-		if err == repo.FileNotExistError {
-			http.Error(w, fmt.Sprintf("Pdf %q doesn't exist", name), http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			log.Println(err)
-			http.Error(w, badRequestMsg, http.StatusBadRequest)
-			return
-		}
-		_, err = io.Copy(w, file)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, badRequestMsg, http.StatusBadRequest)
-			return
-		}
-	} else {
-		var image image.Image
-		var err error
-		var imageType string
+	case ".jpeg":
+		w.Header().Set(contentType, imageJpeg)
+	case ".png":
+		w.Header().Set(contentType, imagePng)
+	default:
+		http.Error(w, internalSrvErrMsg, http.StatusInternalServerError)
+		return
+	}
 
-		image, imageType, err = f.fileService.GetImage(name)
-		if err == repo.FileNotExistError {
-			http.Error(w, fmt.Sprintf("Image %q doesn't exist", name), http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			log.Println(err)
-			http.Error(w, badRequestMsg, http.StatusBadRequest)
-			return
-		}
-
-		switch imageType {
-		case "jpeg":
-			options := jpeg.Options{Quality: 100}
-			w.Header().Set(contentType, imageJpeg)
-			err = jpeg.Encode(w, image, &options)
-		case "png":
-			w.Header().Set(contentType, imagePng)
-			err = png.Encode(w, image)
-		case "default":
-			log.Println(err.Error())
-			http.Error(w, internalSrvErrMsg, http.StatusInternalServerError)
-			return
-		}
+	file, err := f.fileService.GetFile(name)
+	defer file.Close()
+	if err == repo.FileNotExistError {
+		http.Error(w, fmt.Sprintf("File %q doesn't exist", name), http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Println(err)
+		http.Error(w, badRequestMsg, http.StatusBadRequest)
+		return
+	}
+	_, err = io.Copy(w, file)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, internalSrvErrMsg, http.StatusInternalServerError)
+		return
 	}
 }
 
 func (f filesHandler) SaveFile(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(f.maxImageSize)
+	err := r.ParseMultipartForm(f.maxFileSize)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, badRequestMsg, http.StatusBadRequest)
@@ -117,70 +91,49 @@ func (f filesHandler) SaveFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, badRequestMsg, http.StatusBadRequest)
 		return
 	}
-	_, cnt, _ := r.FormFile(fileKey)
+	file, cnt, err := r.FormFile(fileKey)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, badRequestMsg, http.StatusBadRequest)
+		return
+	}
 
 	contentTyp := filepath.Ext(cnt.Filename)
 	switch contentTyp {
 	case ".pdf":
-		f.savePdf(w, r)
+		name, err := f.fileService.SaveFile(file, "pdf")
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, badRequestMsg, http.StatusBadRequest)
+			return
+		}
+		jsonResponse(struct {
+			Name string `json:"name"`
+		}{Name: name}, w, http.StatusCreated)
 	case ".jpg":
-		f.saveImg(w, r)
+		name, err := f.fileService.SaveFile(file, "jpeg")
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, badRequestMsg, http.StatusBadRequest)
+			return
+		}
+		jsonResponse(struct {
+			Name string `json:"name"`
+		}{Name: name}, w, http.StatusCreated)
 	case ".png":
-		f.saveImg(w, r)
+		name, err := f.fileService.SaveFile(file, "png")
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, badRequestMsg, http.StatusBadRequest)
+			return
+		}
+		jsonResponse(struct {
+			Name string `json:"name"`
+		}{Name: name}, w, http.StatusCreated)
 	default:
 		http.Error(w, unsupportedMediaMsg, http.StatusUnsupportedMediaType)
 	}
 
-}
-
-func (f filesHandler) saveImg(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, f.maxImageSize)
-	if err := r.ParseForm(); err != nil {
-		log.Println(err.Error())
-		http.Error(w, badRequestMsg, http.StatusBadRequest)
-		return
-	}
-
-	image, _, err := r.FormFile(fileKey)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, badRequestMsg, http.StatusBadRequest)
-		return
-	}
-	name, err := f.fileService.SaveImage(image)
-	if err != nil {
-		log.Println(err.Error())
-		http.Error(w, badRequestMsg, http.StatusBadRequest)
-		return
-	}
-	jsonResponse(struct {
-		Name string `json:"name"`
-	}{Name: name}, w, http.StatusCreated)
-}
-
-func (f filesHandler) savePdf(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(f.maxPdfSize)
-	if err := r.ParseForm(); err != nil {
-		log.Println(err.Error())
-		http.Error(w, badRequestMsg, http.StatusBadRequest)
-		return
-	}
-
-	pdf, _, err := r.FormFile(fileKey)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, badRequestMsg, http.StatusBadRequest)
-		return
-	}
-	name, err := f.fileService.SavePdf(pdf)
-	if err != nil {
-		log.Println(err.Error())
-		http.Error(w, badRequestMsg, http.StatusBadRequest)
-		return
-	}
-	jsonResponse(struct {
-		Name string `json:"name"`
-	}{Name: name}, w, http.StatusCreated)
 }
 
 func jsonResponse(object interface{}, w http.ResponseWriter, status int) {
