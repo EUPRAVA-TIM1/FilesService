@@ -16,10 +16,13 @@ import (
 )
 
 var UnrecognizedImageFormatError = errors.New("Image format is unsupported")
+var FileNotExistError = errors.New("File doesnt exists")
 
 type FileRepo interface {
 	SaveImage(image multipart.File) (string, error)
 	SavePdf(pdf multipart.File) (string, error)
+	GetImage(name string) (image.Image, string, error)
+	GetPdf(name string) (*os.File, error)
 }
 type fileRepo struct {
 	filePath string
@@ -86,4 +89,38 @@ func (f fileRepo) SavePdf(pdf multipart.File) (string, error) {
 	}
 	return pdfName, nil
 
+}
+
+func (f fileRepo) GetImage(name string) (image.Image, string, error) {
+
+	_, err := os.Stat(path.Join(f.filePath, name))
+	if os.IsNotExist(err) {
+		return nil, "", FileNotExistError
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	file, err := os.Open(path.Join(f.filePath, name))
+	defer file.Close()
+	if err != nil {
+		return nil, "", err
+	}
+
+	return image.Decode(file)
+}
+
+func (f fileRepo) GetPdf(name string) (*os.File, error) {
+	_, err := os.Stat(path.Join(f.filePath, name))
+	if os.IsNotExist(err) {
+		return nil, FileNotExistError
+	}
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.Open(path.Join(f.filePath, name))
+	if err != nil {
+		return nil, err
+	}
+
+	return file, nil
 }

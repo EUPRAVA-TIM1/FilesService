@@ -28,7 +28,7 @@ func NewServer(config *config.Config) *Server {
 func (server Server) setup(path string, maxImgSize int64, maxPdfSize int64) handlers.FilesHandler {
 	fileRepo := repo.NewFileRepo(path)
 	fileService := service.NewFileService(fileRepo)
-	filesHandler := handlers.NewFilesHandler(fileService, maxImgSize, maxPdfSize, fileRepo)
+	filesHandler := handlers.NewFilesHandler(fileService, maxImgSize, maxPdfSize)
 	return filesHandler
 }
 

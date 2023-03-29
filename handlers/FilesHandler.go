@@ -4,7 +4,12 @@ import (
 	"FileService/repo"
 	"FileService/service"
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/mux"
+	"image"
+	"image/jpeg"
+	"image/png"
+	"io"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -31,8 +36,7 @@ type filesHandler struct {
 	fileService  service.FileService
 }
 
-// TODO skloni repo ovde
-func NewFilesHandler(s service.FileService, maxImgSize int64, maxPdfSize int64, r repo.FileRepo) FilesHandler {
+func NewFilesHandler(s service.FileService, maxImgSize int64, maxPdfSize int64) FilesHandler {
 	return filesHandler{fileService: s, maxPdfSize: maxPdfSize, maxImageSize: maxImgSize}
 }
 
@@ -44,7 +48,61 @@ func (f filesHandler) Init(r *mux.Router) {
 }
 
 func (f filesHandler) GetFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["file"]
+	var fileType string
 
+	fileType = filepath.Ext(name)
+
+	if fileType == ".pdf" {
+		w.Header().Set(contentType, appPdf)
+		file, err := f.fileService.GetPdf(name)
+		defer file.Close()
+		if err == repo.FileNotExistError {
+			http.Error(w, fmt.Sprintf("Pdf %q doesn't exist", name), http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			log.Println(err)
+			http.Error(w, badRequestMsg, http.StatusBadRequest)
+			return
+		}
+		_, err = io.Copy(w, file)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, badRequestMsg, http.StatusBadRequest)
+			return
+		}
+	} else {
+		var image image.Image
+		var err error
+		var imageType string
+
+		image, imageType, err = f.fileService.GetImage(name)
+		if err == repo.FileNotExistError {
+			http.Error(w, fmt.Sprintf("Image %q doesn't exist", name), http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			log.Println(err)
+			http.Error(w, badRequestMsg, http.StatusBadRequest)
+			return
+		}
+
+		switch imageType {
+		case "jpeg":
+			options := jpeg.Options{Quality: 100}
+			w.Header().Set(contentType, imageJpeg)
+			err = jpeg.Encode(w, image, &options)
+		case "png":
+			w.Header().Set(contentType, imagePng)
+			err = png.Encode(w, image)
+		case "default":
+			log.Println(err.Error())
+			http.Error(w, internalSrvErrMsg, http.StatusInternalServerError)
+			return
+		}
+	}
 }
 
 func (f filesHandler) SaveFile(w http.ResponseWriter, r *http.Request) {
