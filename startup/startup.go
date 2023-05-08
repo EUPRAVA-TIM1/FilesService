@@ -7,6 +7,7 @@ import (
 	"FileService/service"
 	"context"
 	"fmt"
+	muxHandlers "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
@@ -36,12 +37,18 @@ func (server Server) Start() {
 
 	r := mux.NewRouter()
 
+	corsHandler := muxHandlers.CORS(
+		muxHandlers.AllowedOrigins([]string{"*"}),
+		muxHandlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		muxHandlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+	)
+
 	h := server.setup(server.config.FilesPath, server.config.MaxFileSize)
 	h.Init(r)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", server.config.Port),
-		Handler: r,
+		Handler: corsHandler(r),
 	}
 
 	wait := time.Second * 15
